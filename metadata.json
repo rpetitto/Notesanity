@@ -1,0 +1,5 @@
+{
+  "name": "NoteSanity",
+  "description": "A OneNote-style digital binder that syncs bidirectionally with Google Classroom and Google Drive, allowing students to organize their academic life.",
+  "requestFramePermissions": []
+}
