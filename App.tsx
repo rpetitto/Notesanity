@@ -4,7 +4,13 @@ import FileDrawer from './components/FileDrawer';
 import GeminiAssistant from './components/GeminiAssistant';
 import TeacherDashboard from './components/TeacherDashboard';
 import { Classroom, DriveFile } from './types';
-import { getClasses, getFiles, getFileContent, createNewFolder } from './services/dataService';
+import { getClasses } from './services/dataService';
+import { 
+  initGoogleClient, 
+  requestAuthToken, 
+  listDriveFiles, 
+  getGoogleFileContent 
+} from './services/googleApiService';
 import { 
   Sparkles, 
   ArrowLeft,
@@ -12,7 +18,10 @@ import {
   MoreVertical,
   Share2,
   Clock,
-  LayoutGrid
+  LayoutGrid,
+  GraduationCap,
+  LogIn,
+  Loader2
 } from 'lucide-react';
 import { generateSummary } from './services/geminiService';
 
@@ -26,32 +35,42 @@ const App: React.FC = () => {
   const [fileContent, setFileContent] = useState<string>('');
   
   const [loading, setLoading] = useState(false);
+  const [isAuthorized, setIsAuthorized] = useState(false);
+  const [initializing, setInitializing] = useState(true);
   const [aiSidebarOpen, setAiSidebarOpen] = useState(false);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [generatedSummary, setGeneratedSummary] = useState<string | null>(null);
 
   useEffect(() => {
-    loadClasses();
+    const init = async () => {
+      await initGoogleClient((authorized) => {
+        setIsAuthorized(authorized);
+        if (authorized) {
+          loadClasses();
+        }
+      });
+      setInitializing(false);
+    };
+    init();
   }, []);
 
   useEffect(() => {
-    if (currentFolderId) {
+    if (isAuthorized && currentFolderId) {
       fetchFiles(currentFolderId);
     }
-  }, [currentFolderId]);
+  }, [currentFolderId, isAuthorized]);
 
   useEffect(() => {
-    if (selectedFile) {
+    if (selectedFile && isAuthorized) {
       setGeneratedSummary(null);
-      setFileContent('Loading document content...');
-      getFileContent(selectedFile.id).then(setFileContent);
+      setFileContent('Fetching document content...');
+      getGoogleFileContent(selectedFile.id).then(setFileContent);
     }
-  }, [selectedFile]);
+  }, [selectedFile, isAuthorized]);
 
   const loadClasses = async () => {
     const data = await getClasses();
     setClasses(data);
-    // If we're in student mode and nothing is selected, select the first available binder
     if (data.length > 0 && !selectedClassId && viewMode === 'student') {
       const first = data[0];
       setSelectedClassId(first.id);
@@ -61,7 +80,7 @@ const App: React.FC = () => {
 
   const fetchFiles = async (folderId: string) => {
     setLoading(true);
-    const data = await getFiles(folderId);
+    const data = await listDriveFiles(folderId);
     setFiles(data);
     setLoading(false);
   };
@@ -74,14 +93,72 @@ const App: React.FC = () => {
     setViewMode('student'); 
   };
 
-  const handleCreateFolder = async () => {
-    if (!currentFolderId) return;
-    const name = prompt('New Section Name:');
-    if (name) {
-      const result = await createNewFolder(name, currentFolderId);
-      if (result) fetchFiles(currentFolderId);
-    }
+  const handleSignIn = () => {
+    requestAuthToken();
   };
+
+  if (initializing) {
+    return (
+      <div className="h-screen w-screen flex flex-col items-center justify-center bg-slate-50 gap-4">
+        <div className="w-16 h-16 bg-indigo-600 rounded-[24px] flex items-center justify-center shadow-lg shadow-indigo-100 animate-bounce">
+            <GraduationCap className="text-white w-8 h-8" />
+        </div>
+        <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
+      </div>
+    );
+  }
+
+  if (!isAuthorized) {
+    return (
+      <div className="h-screen w-screen bg-white flex flex-col md:flex-row">
+        <div className="flex-1 flex flex-col justify-center px-10 md:px-24">
+            <div className="mb-8 w-14 h-14 bg-indigo-600 rounded-[20px] flex items-center justify-center text-white">
+                <GraduationCap className="w-8 h-8" />
+            </div>
+            <h1 className="text-5xl font-bold text-slate-900 mb-6 leading-tight">Your academic life,<br/><span className="text-indigo-600">Perfectly Organized.</span></h1>
+            <p className="text-xl text-slate-500 mb-12 max-w-lg leading-relaxed">NoteSanity turns your Google Classroom courses and Drive files into a beautiful, digital binder powered by AI.</p>
+            
+            <button 
+              onClick={handleSignIn}
+              className="flex items-center gap-4 bg-slate-900 text-white px-8 py-5 rounded-[24px] font-bold text-lg hover:bg-slate-800 m3-transition shadow-xl active:scale-95 w-fit"
+            >
+              <LogIn className="w-6 h-6" />
+              Sign in with Google
+            </button>
+
+            <div className="mt-20 flex gap-12">
+                <div>
+                    <div className="text-2xl font-bold text-slate-800">100%</div>
+                    <div className="text-slate-400 text-sm">Drive Synced</div>
+                </div>
+                <div>
+                    <div className="text-2xl font-bold text-slate-800">AI</div>
+                    <div className="text-slate-400 text-sm">Study Assistant</div>
+                </div>
+            </div>
+        </div>
+        <div className="flex-1 bg-slate-50 hidden md:flex items-center justify-center">
+            <div className="w-[80%] aspect-video m3-card bg-white p-8 border border-slate-100 relative overflow-hidden flex flex-col">
+                <div className="h-4 w-32 bg-slate-100 rounded-full mb-8"></div>
+                <div className="flex gap-4">
+                    <div className="w-1/3 space-y-3">
+                        <div className="h-8 bg-indigo-50 rounded-xl"></div>
+                        <div className="h-8 bg-slate-50 rounded-xl"></div>
+                        <div className="h-8 bg-slate-50 rounded-xl"></div>
+                    </div>
+                    <div className="flex-1 p-6 bg-slate-50 rounded-3xl">
+                        <div className="h-4 w-full bg-slate-200 rounded mb-4"></div>
+                        <div className="h-4 w-[90%] bg-slate-200 rounded mb-4"></div>
+                        <div className="h-4 w-[85%] bg-slate-200 rounded mb-8"></div>
+                        <div className="h-32 w-full bg-indigo-100/50 rounded-2xl border border-dashed border-indigo-200"></div>
+                    </div>
+                </div>
+                <div className="absolute -bottom-10 -right-10 w-40 h-40 bg-indigo-600 rounded-full blur-[80px] opacity-10"></div>
+            </div>
+        </div>
+      </div>
+    );
+  }
 
   const currentClass = classes.find(c => c.id === selectedClassId);
 
@@ -107,7 +184,7 @@ const App: React.FC = () => {
               onSelectFile={setSelectedFile}
               selectedFileId={selectedFile?.id || null}
               loading={loading}
-              onCreateFolder={handleCreateFolder}
+              onCreateFolder={() => {}} // Disabled for now to prevent Drive mutations in metadata
             />
           ) : (
              <div className="w-80 bg-slate-50 border-r border-slate-200 flex flex-col items-center justify-center p-8 text-center">
@@ -115,13 +192,12 @@ const App: React.FC = () => {
                     <LayoutGrid className="w-8 h-8" />
                 </div>
                 <h3 className="font-bold text-slate-700">No Binders Yet</h3>
-                <p className="text-sm text-slate-500 mt-2">Go to Teacher Dashboard to sync your first classroom.</p>
+                <p className="text-sm text-slate-500 mt-2">Go to Teacher Mode to sync courses from Google Classroom.</p>
              </div>
           )}
 
           <main className="flex-1 flex flex-col min-w-0 bg-white relative m-2 mr-0 rounded-l-[32px] shadow-sm overflow-hidden border border-slate-200/50">
             
-            {/* M3 Top App Bar */}
             <header className="h-16 px-6 flex items-center justify-between shrink-0 border-b border-slate-100">
               <div className="flex items-center gap-4 min-w-0">
                 {currentFolderId !== currentClass?.driveFolderId && (
@@ -147,15 +223,11 @@ const App: React.FC = () => {
                    <Search className="w-5 h-5" />
                 </button>
                 <button className="p-2.5 text-slate-500 hover:bg-slate-100 rounded-full m3-transition">
-                   <Share2 className="w-5 h-5" />
-                </button>
-                <button className="p-2.5 text-slate-500 hover:bg-slate-100 rounded-full m3-transition">
                    <MoreVertical className="w-5 h-5" />
                 </button>
               </div>
             </header>
 
-            {/* Content Area */}
             <div className="flex-1 overflow-y-auto p-4 md:p-10 bg-[#FCFCFF]">
               {selectedFile ? (
                 <div className="max-w-4xl mx-auto">
@@ -185,21 +257,14 @@ const App: React.FC = () => {
 
                     {generatedSummary && (
                       <div className="mb-10 p-6 bg-gradient-to-br from-indigo-50 to-white border border-indigo-100 rounded-[28px] relative overflow-hidden">
-                        <div className="absolute top-0 right-0 p-4 opacity-10 text-indigo-600">
-                            <Sparkles className="w-12 h-12" />
-                        </div>
-                        <h4 className="font-bold text-indigo-900 mb-3 flex items-center gap-2">
-                          Smart Summary
-                        </h4>
-                        <div className="text-indigo-800 text-sm leading-relaxed prose prose-indigo max-w-none">
-                          {generatedSummary}
-                        </div>
+                        <h4 className="font-bold text-indigo-900 mb-3 flex items-center gap-2">Smart Summary</h4>
+                        <div className="text-indigo-800 text-sm leading-relaxed prose prose-indigo max-w-none whitespace-pre-wrap">{generatedSummary}</div>
                       </div>
                     )}
 
                     <div className="prose prose-slate max-w-none">
                       <div className="font-serif text-lg leading-relaxed text-slate-700 whitespace-pre-wrap">
-                        {fileContent || <span className="text-slate-300 italic text-2xl">Start typing or upload a document to begin.</span>}
+                        {fileContent}
                       </div>
                     </div>
                   </div>
@@ -215,7 +280,6 @@ const App: React.FC = () => {
               )}
             </div>
 
-            {/* M3 Extended FAB */}
             <button 
               onClick={() => setAiSidebarOpen(true)}
               className={`
@@ -224,7 +288,7 @@ const App: React.FC = () => {
               `}
             >
               <Sparkles className="w-6 h-6" />
-              <span className="font-bold tracking-wide text-sm">ASK BINDER AI</span>
+              <span className="font-bold tracking-wide text-sm uppercase">Ask Binder AI</span>
             </button>
 
             <GeminiAssistant 

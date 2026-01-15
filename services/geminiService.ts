@@ -1,24 +1,14 @@
 import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 import { ChatMessage } from "../types";
 
-// In a real app, this key comes from a secure backend or strict environment config
-const API_KEY = process.env.API_KEY || ''; 
-
-let ai: GoogleGenAI | null = null;
-
-if (API_KEY) {
-  ai = new GoogleGenAI({ apiKey: API_KEY });
-}
+// Always initialize GoogleGenAI with API key directly from process.env.API_KEY as per guidelines.
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
 
 export const sendMessageToGemini = async (
   history: ChatMessage[],
   currentContext: string, // Content of the currently open file or folder description
   userPrompt: string
 ): Promise<string> => {
-  if (!ai) {
-    return "API Key is missing. Please check your configuration.";
-  }
-
   try {
     const model = 'gemini-3-flash-preview';
     
@@ -42,6 +32,7 @@ export const sendMessageToGemini = async (
       }))
     });
 
+    // Access .text property directly as per @google/genai guidelines.
     const result: GenerateContentResponse = await chat.sendMessage({ message: userPrompt });
     return result.text || "I couldn't generate a response.";
     
@@ -52,13 +43,12 @@ export const sendMessageToGemini = async (
 };
 
 export const generateSummary = async (content: string): Promise<string> => {
-  if (!ai) return "API Key missing.";
-
   try {
     const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: `Summarize the following document for a student in 3 bullet points:\n\n${content}`,
     });
+    // Access .text property directly as per @google/genai guidelines.
     return response.text || "No summary available.";
   } catch (error) {
     return "Error generating summary.";
