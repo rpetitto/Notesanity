@@ -7,29 +7,43 @@ let tokenClient: any;
 let gapiInited = false;
 let gsisInited = false;
 
+const COURSE_COLORS = [
+  '#4f46e5', // Indigo
+  '#0891b2', // Cyan
+  '#059669', // Emerald
+  '#d97706', // Amber
+  '#dc2626', // Red
+  '#7c3aed', // Violet
+  '#db2777', // Pink
+  '#2563eb', // Blue
+];
+
+const getCourseColor = (courseId: string) => {
+  const hash = courseId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  return COURSE_COLORS[hash % COURSE_COLORS.length];
+};
+
 export const initGoogleClient = async (onAuthChange: (authorized: boolean) => void): Promise<void> => {
   return new Promise((resolve) => {
     const checkInit = () => {
       if (gapiInited && gsisInited) resolve();
     };
 
-    // Initialize GAPI
-    // Fix: Use type assertion (window as any).gapi to resolve TS 'property does not exist' error.
     (window as any).gapi.load('client', async () => {
-      // Fix: Use type assertion (window as any).gapi to resolve TS 'property does not exist' error.
-      await (window as any).gapi.client.init({
-        apiKey: '', // Optional for these scopes if using OAuth
-        discoveryDocs: [
-          'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest',
-          'https://www.googleapis.com/discovery/v1/apis/classroom/v1/rest'
-        ],
-      });
-      gapiInited = true;
-      checkInit();
+      try {
+        await (window as any).gapi.client.init({
+          discoveryDocs: [
+            'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest',
+            'https://www.googleapis.com/discovery/v1/apis/classroom/v1/rest'
+          ],
+        });
+        gapiInited = true;
+        checkInit();
+      } catch (e) {
+        console.error("GAPI Init Failed", e);
+      }
     });
 
-    // Initialize GIS (Google Identity Services)
-    // Fix: Use type assertion (window as any).google to resolve TS 'property does not exist' error.
     tokenClient = (window as any).google.accounts.oauth2.initTokenClient({
       client_id: CLIENT_ID,
       scope: SCOPES,
@@ -52,18 +66,20 @@ export const requestAuthToken = () => {
 
 export const listGoogleClassrooms = async (): Promise<Classroom[]> => {
   try {
-    // Fix: Use type assertion (window as any).gapi to resolve TS 'property does not exist' error.
     const response = await (window as any).gapi.client.classroom.courses.list();
     const courses = response.result.courses || [];
     
-    return courses.map((course: any) => ({
-      id: course.id,
-      name: course.name,
-      section: course.section || 'General',
-      color: '#4f46e5', // Default color, ideally derived from course.courseColor
-      driveFolderId: course.teacherFolder?.id || '', // Note: student might need different folder logic
-      isSynced: false
-    }));
+    // Filter for active classes only and apply deterministic themes
+    return courses
+      .filter((course: any) => course.courseState === 'ACTIVE')
+      .map((course: any) => ({
+        id: course.id,
+        name: course.name,
+        section: course.section || 'General',
+        color: getCourseColor(course.id),
+        driveFolderId: course.teacherFolder?.id || '',
+        isSynced: false
+      }));
   } catch (err) {
     console.error('Error listing classrooms:', err);
     return [];
@@ -72,7 +88,6 @@ export const listGoogleClassrooms = async (): Promise<Classroom[]> => {
 
 export const listDriveFiles = async (folderId: string): Promise<DriveFile[]> => {
   try {
-    // Fix: Use type assertion (window as any).gapi to resolve TS 'property does not exist' error.
     const response = await (window as any).gapi.client.drive.files.list({
       q: `'${folderId}' in parents and trashed = false`,
       fields: 'files(id, name, mimeType, modifiedTime)',
@@ -95,15 +110,12 @@ export const listDriveFiles = async (folderId: string): Promise<DriveFile[]> => 
 
 export const getGoogleFileContent = async (fileId: string): Promise<string> => {
   try {
-    // Fix: Use type assertion (window as any).gapi to resolve TS 'property does not exist' error.
-    // For Google Docs, we export as text or fetch metadata if non-text
     const file = await (window as any).gapi.client.drive.files.get({
       fileId: fileId,
       fields: 'id, name, mimeType'
     });
 
     if (file.result.mimeType === 'application/vnd.google-apps.document') {
-      // Fix: Use type assertion (window as any).gapi to resolve TS 'property does not exist' error.
       const exportResponse = await (window as any).gapi.client.drive.files.export({
         fileId: fileId,
         mimeType: 'text/plain'
@@ -111,7 +123,7 @@ export const getGoogleFileContent = async (fileId: string): Promise<string> => {
       return exportResponse.body;
     }
     
-    return `Content preview for ${file.result.mimeType} is not supported yet in the binder view.`;
+    return `Content preview for ${file.result.mimeType} is not supported. View this file in Google Drive.`;
   } catch (err) {
     console.error('Error getting file content:', err);
     return 'Could not retrieve document content.';

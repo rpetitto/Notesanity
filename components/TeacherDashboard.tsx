@@ -2,8 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Classroom } from '../types';
 import { syncGoogleClassroom } from '../services/dataService';
 import { listGoogleClassrooms } from '../services/googleApiService';
-// Fix: Corrected import from 'lucide-center' to 'lucide-react' and added GraduationCap to the shared import.
-import { RefreshCcw, CheckCircle2, Plus, ArrowRight, Loader2, AlertCircle, GraduationCap } from 'lucide-react';
+import { RefreshCcw, CheckCircle2, Plus, ArrowRight, Loader2, AlertCircle, GraduationCap, WifiOff } from 'lucide-react';
 
 interface TeacherDashboardProps {
   syncedClasses: Classroom[];
@@ -28,7 +27,7 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ syncedClasses, onSy
       const syncedIds = syncedClasses.map(c => c.id);
       setAvailableClasses(available.filter(ac => !syncedIds.includes(ac.id)));
     } catch (err) {
-      setError("Failed to load Google Classrooms. Ensure you've given permission.");
+      setError("Failed to reach Google APIs. Please check your connection.");
     } finally {
       setLoading(false);
     }
@@ -41,7 +40,7 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ syncedClasses, onSy
     if (success) {
       onSyncComplete();
     } else {
-      setError("Failed to sync binder to database.");
+      setError("Database connection error. Sync failed, but you can still browse Google Drive.");
     }
     setSyncingId(null);
   };
@@ -53,12 +52,15 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ syncedClasses, onSy
             <span className="px-3 py-1 bg-indigo-100 text-indigo-600 rounded-full text-xs font-bold uppercase tracking-wider">Teacher Mode</span>
         </div>
         <h1 className="text-4xl font-bold text-slate-900 mb-2">Google Classroom Sync</h1>
-        <p className="text-slate-500 text-lg">Convert your courses into digital binders with one click.</p>
+        <p className="text-slate-500 text-lg">Sync your active courses to create digital binders for students.</p>
         
         {error && (
           <div className="mt-6 p-4 bg-red-50 border border-red-100 rounded-2xl flex items-center gap-3 text-red-700">
             <AlertCircle className="w-5 h-5" />
-            <span className="text-sm font-medium">{error}</span>
+            <div className="flex flex-col">
+              <span className="text-sm font-bold">Connectivity Warning</span>
+              <span className="text-xs">{error}</span>
+            </div>
           </div>
         )}
       </header>
@@ -72,7 +74,7 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ syncedClasses, onSy
             <RefreshCcw className={`w-8 h-8 ${loading ? 'animate-spin' : ''}`} />
           </div>
           <h3 className="font-bold text-lg text-slate-700">Refresh Courses</h3>
-          <p className="text-sm text-slate-400 mt-2">Scan Classroom for updates</p>
+          <p className="text-sm text-slate-400 mt-2">Scanning active courses...</p>
         </div>
 
         {loading ? (
@@ -84,11 +86,12 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ syncedClasses, onSy
             <div key={cls.id} className="m3-card p-6 flex flex-col m3-transition hover:shadow-xl hover:-translate-y-1">
               <div className="flex justify-between items-start mb-6">
                 <div 
-                  className="w-14 h-14 rounded-2xl flex items-center justify-center text-white shadow-lg bg-indigo-600"
+                  className="w-14 h-14 rounded-2xl flex items-center justify-center text-white shadow-lg"
+                  style={{ backgroundColor: cls.color }}
                 >
                   <GraduationCap className="w-7 h-7" />
                 </div>
-                <span className="px-3 py-1 bg-indigo-50 text-indigo-600 text-[10px] font-bold uppercase tracking-wider rounded-full">Available</span>
+                <span className="px-3 py-1 bg-indigo-50 text-indigo-600 text-[10px] font-bold uppercase tracking-wider rounded-full">Active</span>
               </div>
               <h3 className="text-xl font-bold text-slate-800">{cls.name}</h3>
               <p className="text-sm text-slate-500 mb-8">{cls.section}</p>
@@ -98,7 +101,7 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ syncedClasses, onSy
                 disabled={!!syncingId}
                 className="mt-auto flex items-center justify-center gap-2 w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 disabled:opacity-50 m3-transition"
               >
-                {syncingId === cls.id ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Plus className="w-5 h-5" /> Create Binder</>}
+                {syncingId === cls.id ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Plus className="w-5 h-5" /> Sync Binder</>}
               </button>
             </div>
           ))
@@ -107,7 +110,7 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ syncedClasses, onSy
         {syncedClasses.map(cls => (
           <div key={cls.id} className="m3-card p-6 flex flex-col bg-slate-50/50 border border-slate-200 opacity-80">
             <div className="flex justify-between items-start mb-6">
-                <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-slate-300 bg-slate-100">
+                <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-white grayscale" style={{ backgroundColor: cls.color }}>
                   <GraduationCap className="w-7 h-7" />
                 </div>
                 <span className="px-3 py-1 bg-green-100 text-green-700 text-[10px] font-bold uppercase tracking-wider rounded-full flex items-center gap-1">
@@ -118,10 +121,10 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ syncedClasses, onSy
               <h3 className="text-xl font-bold text-slate-800">{cls.name}</h3>
               <p className="text-sm text-slate-500 mb-8">{cls.section}</p>
               
-              <button className="mt-auto flex items-center justify-between w-full p-4 bg-white border border-slate-200 text-slate-600 rounded-2xl font-medium hover:bg-slate-100 m3-transition group cursor-default">
-                Binder Active
+              <div className="mt-auto flex items-center justify-between w-full p-4 bg-white border border-slate-200 text-slate-400 rounded-2xl font-medium cursor-default">
+                Synced & Active
                 <ArrowRight className="w-4 h-4" />
-              </button>
+              </div>
           </div>
         ))}
       </section>
